@@ -13,21 +13,21 @@ import Utils
 
 unify_one :: (Type, Type) -> Subst
 unify_one (tau, (TVar t)) =
-	if (occursIn (TVar t) tau)
-	then throw TypeCircularity
-	else [(t, tau)]
+    if (occursIn (TVar t) tau)
+    then throw TypeCircularity
+    else [(t, tau)]
 unify_one ((TVar t), tau) = 
-	if (occursIn (TVar t) tau)
-	then throw TypeCircularity
-	else [(t, tau)]
+    if (occursIn (TVar t) tau)
+    then throw TypeCircularity
+    else [(t, tau)]
 unify_one ((TBase a), (TBase b)) =
-	if a == b
-	then [ ]
-	else throw (TypeMismatch (TBase a) (TBase b))
+    if a == b
+    then [ ]
+    else throw (TypeMismatch (TBase a) (TBase b))
 unify_one ((TArrow t11 t12), (TArrow t21 t22)) =
-	let s1 = unify_one t11 t21
-		s2 = unify_one (applySubst t12 s1) (applySubst t22 s1)
-	in (s2 ++ s1)
+    let s1 = unify_one (t11, t21)
+        s2 = unify_one ((applySubst t12 s1), (applySubst t22 s1))
+    in (s2 ++ s1)
 unify_one (tau_1, tau_2) = throw (TypeMismatch tau_1 tau_2)
 
 {- Performs type inference. -}
