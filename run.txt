@@ -1,0 +1,3 @@
+ghci
+:load Data.hs Utils.hs TypeInfer.hs
+:m
