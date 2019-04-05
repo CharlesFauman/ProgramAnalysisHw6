@@ -31,22 +31,17 @@ unify_one ((TArrow t11 t12), (TArrow t21 t22)) =
 unify_one (tau_1, tau_2) = throw (TypeMismatch tau_1 tau_2)
 
 
+
 {-
-applySubsOnTVar ::  Subst -> (String, Type) -> ConstraintEnv
-
-applySubsOnGamma :: Subst -> ConstraintEnv -> ConstraintEnv
-applySubsOnGamma subs cenv =
-  let cenv' = CEnv { constraints = constraints cenv
-                   , var = var cenv
-                   , tenv = foldr applySubsOnTVar subs (tenv cenv)}
-  in cenv'
-
-applySubsOnGamma Subst Tenv
+apply the subs to that variable
 -}
-
 applySubsOnTVar ::  Subst -> (String, Type) -> (String, Type)
 applySubsOnTVar subs (v, t) = (v, applySubst t subs)
 
+
+{-
+for each variable, call applySubsOnTVar with all the subs
+-}
 applySubsOnGamma :: Subst -> ConstraintEnv -> ConstraintEnv
 applySubsOnGamma subs cenv =
   let cenv' = CEnv { constraints = constraints cenv
@@ -55,12 +50,30 @@ applySubsOnGamma subs cenv =
                  }
   in cenv'
 
+{-
+search environment for variable. If not in environment, throw error
+-}
 findInEnv :: TEnv -> TVar -> Type
 findInEnv ((head_var, head_type):tail) var =
   if var == head_var
   then head_type
   else findInEnv tail var
 findInEnv [] var = throw (UnboundVar var)
+
+manageStatement :: ConstraintEnv -> Stmt -> (ConstraintEnv, Subst)
+manageStatement cenv SEmpty = (cenv, [])
+manageStatement cenv (SAssign ident exp) =
+  let (cenv1, s1, t1) = inferTypes cenv exp
+      cenv2 = applySubsOnGamma s1 cenv1
+      t2 = applySubst t1 s1
+      cenv3 = CEnv { constraints = constraints cenv2
+                   , var = var cenv2
+                   , tenv = (tenv cenv2) ++ [(ident, t2)]
+                 }
+  in (cenv3, s1)
+manageStatement cenv (SSeq stmt1 stmt2) =
+  let (cenv1, s1) = manageStatement cenv stmt1
+  in manageStatement cenv1 stmt2
 
 {- Performs type inference. -}
 inferTypes :: ConstraintEnv -> Exp -> (ConstraintEnv, Subst, Type)
@@ -93,18 +106,10 @@ inferTypes cenv (EPlus op1 op2) =
     in (cenv2, s4, intType)
 inferTypes cenv (EPrim (PNum _)) = (cenv, [], intType)
 inferTypes cenv (EPrim (PBool _)) = (cenv, [], boolType)
-inferTypes cenv (ELet SEmpty body) = inferTypes cenv body
-inferTypes cenv (ELet (SAssign ident exp) body) =
-  let (cenv1, s1, t1) = inferTypes cenv exp
-      cenv2 = applySubsOnGamma s1 cenv1
-      t2 = applySubst t1 s1
-      cenv3 = CEnv { constraints = constraints cenv2
-                   , var = var cenv2
-                   , tenv = (tenv cenv2) ++ [(ident, t2)]
-                 }
-      (cenv4, s4, t4) = inferTypes cenv3 body
-  in (cenv4, s4 ++ s1, t4)
-inferTypes cenv (ELet (SSeq stmt1 stmt2) body) = throw ToImplement
+inferTypes cenv (ELet s body) = 
+  let (cenv1, s1) = manageStatement cenv s
+      (cenv2, s2, t2) = inferTypes cenv1 body
+  in (cenv2, s2 ++ s1, t2)
 
 {- Top-level type inference function. I will be calling it on Submitty. -}
 inferType :: Exp -> Type
