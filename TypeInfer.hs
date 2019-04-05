@@ -44,7 +44,18 @@ applySubsOnGamma subs cenv =
 applySubsOnGamma Subst Tenv
 -}
 
-findInEnv :: TEnv -> Tvar -> Type
+applySubsOnTVar ::  Subst -> (String, Type) -> (String, Type)
+applySubsOnTVar subs (v, t) = (v, applySubst t subs)
+
+applySubsOnGamma :: Subst -> ConstraintEnv -> ConstraintEnv
+applySubsOnGamma subs cenv =
+  let cenv' = CEnv { constraints = constraints cenv
+                   , var = var cenv
+                   , tenv = map (applySubsOnTVar subs) (tenv cenv)
+                 }
+  in cenv'
+
+findInEnv :: TEnv -> TVar -> Type
 findInEnv ((head_var, head_type):tail) var =
   if var == head_var
   then head_type
@@ -59,13 +70,13 @@ inferTypes cenv (EVar var) =
 inferTypes cenv (ELambda v body) =
   let (tv, cenv1) = newTVar cenv
       (cenv2, s1, t1) = (inferTypes cenv1 body)
-  in (cenv2, s1, (applySubst (TArrow tv t1) s1)
+  in (cenv2, s1, (applySubst (TArrow tv t1) s1) )
 inferTypes cenv (EApp fn arg) =
   let (tv, cenv1) = newTVar cenv
       (cenv2, s1, t1) = (inferTypes cenv1 fn)
       (cenv3, s2, t2) = (inferTypes (applySubsOnGamma s1 cenv2) arg)
-      s3 = (unify_one (applySubst t1 s2), (TArrow t2 tv)))
-  in (s3 ++ s2 ++ s1, apply s3 tv)
+      s3 = (unify_one ((applySubst t1 s2), (TArrow t2 tv)))
+  in (cenv3, s3 ++ s2 ++ s1, applySubst tv s3)
 inferTypes cenv (ECond pred tbody fbody) =
     let (cenv1, s1, t1) = (inferTypes cenv pred)
         s2 = (unify_one (t1, boolType)) ++ s1
@@ -82,12 +93,18 @@ inferTypes cenv (EPlus op1 op2) =
     in (cenv2, s4, intType)
 inferTypes cenv (EPrim (PNum _)) = (cenv, [], intType)
 inferTypes cenv (EPrim (PBool _)) = (cenv, [], boolType)
-inferTypes cenv (ELet s body) =
-  let (cenv1, s1, t1) = inferTypes env s
+inferTypes cenv (ELet SEmpty body) = inferTypes cenv body
+inferTypes cenv (ELet (SAssign ident exp) body) =
+  let (cenv1, s1, t1) = inferTypes cenv exp
       cenv2 = applySubsOnGamma s1 cenv1
-      t2 = apply t1 cenv2
-      (s2, t2) = inferTypes cenv2
-  in (cenv1, s1, t2)
+      t2 = applySubst t1 s1
+      cenv3 = CEnv { constraints = constraints cenv2
+                   , var = var cenv2
+                   , tenv = (tenv cenv2) ++ [(ident, t2)]
+                 }
+      (cenv4, s4, t4) = inferTypes cenv3 body
+  in (cenv4, s4 ++ s1, t4)
+inferTypes cenv (ELet (SSeq stmt1 stmt2) body) = throw ToImplement
 
 {- Top-level type inference function. I will be calling it on Submitty. -}
 inferType :: Exp -> Type
